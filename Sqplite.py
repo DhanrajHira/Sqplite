@@ -145,9 +145,27 @@ class Sqplite:
         cursor = self.connection.cursor()
         if where == None:
             cursor.execute('SELECT * FROM {0}'.format(tablename))
-        else:
-            sqlstring = 'SELECT * FROM {0} WHERE {1}'.format(tablename, where)
+        elif type(where) == All:
+            sqlString = ''
+            for condition in where.query_conditions_list:
+                sqlString = sqlString + condition.toSQL() + ' AND '
+            sqlString = sqlString[:-4]
+            print('SELECT * FROM {0} WHERE {1}'.format(tablename, sqlString))
+            cursor.execute('SELECT * FROM {0} WHERE {1}'.format(tablename, sqlString))
+
+        elif type(where) == Field:
+            sqlstring = 'SELECT * FROM {0} WHERE {1}'.format(tablename, where.toSQL())
+            print(sqlstring)
             cursor.execute(sqlstring)
+
+        elif type(where) == Any:
+            sqlString = ''
+            for condition in where.query_conditions_list:
+                sqlString = sqlString + condition.toSQL() + ' OR '
+            sqlString = sqlString[:-3]
+            print('SELECT * FROM {0} WHERE {1}'.format(tablename, sqlString))
+            cursor.execute('SELECT * FROM {0} WHERE {1}'.format(tablename, sqlString))
+
         results = cursor.fetchall()
         return self.formatRawResults(rawResults=results, tablename=tablename)
 
@@ -206,24 +224,92 @@ class Sqplite:
         cursor = self.connection.cursor()
         cursor.execute(sqlcommand)
 
-class SqlField(ABC):
 
-    @abc.abstractmethod
-    def toSQL(self): 
-        pass
-
-
-class SqlQuery(ABC):
+class SqlSyntaxGenerator(ABC):
 
     @abc.abstractmethod
     def toSQL(self):
         pass
 
 
-class CharField(SqlField):
-    def __init__(self, self.name, self.lenght = 50, self.nullable = True):
-        pass
+class CharField(SqlSyntaxGenerator):
+    def __init__(self, name, primary_key = False):
+        self.name = name
+        self.primary_key = primary_key
 
     def toSQL(self):
-        sqlstring = ''
-        
+        sqlString = '{0} CHAR '.format(self.name)
+        if self.primary_key:
+            sqlString = sqlString + ' PRIMARY KEY '
+
+        return sqlString
+
+class IntField(SqlSyntaxGenerator):
+    def __init__(self, name, primary_key = False, auto_increment = False):
+        self.name = name
+        self.primary_key = primary_key 
+        self.auto_increment = auto_increment 
+
+    def toSQL(self):
+        sqlString = '{0} {1} '.format(self.name, 'INTEGER')
+        if self.auto_increment:
+            sqlString = sqlString + ' AUTO INCREMENT '
+        if self.primary_key :
+            sqlString = sqlString + ' PRIMARY KEY '
+
+class RawSqlWrapper(SqlSyntaxGenerator):
+    def __init__(self, sqlString):
+        self.sqlString = sqlString
+
+    def toSQL(self):
+        return self.sqlString
+
+class Field:
+
+    def __init__(self, fieldname):
+        self.fieldname = fieldname
+
+    def isEqualTo(self, value):
+        # returns the records which contain fields 
+        # whose values are equal to [value]
+        if type(value)==str:
+            return RawSqlWrapper('{0} = \'{1}\''.format(self.fieldname, value))
+        elif type(value) == int:
+            return RawSqlWrapper('{0} = {1}'.format(self.fieldname, value))
+
+    def isLike(self, value):
+        # matches the substring [value] to the stored value in the 
+        # field
+        if type(value) == str:
+            return RawSqlWrapper('{0} LIKE \'%{1}%\''.format(self.fieldname, value))
+
+    def startsWith(self, value):
+        # returns records that start with [value]
+        return RawSqlWrapper('{0} LIKE \'{1}%\''.format(self.fieldname, value))
+
+    def endsWith(self, value):
+        # returns records that end with [value]
+        return RawSqlWrapper('{0} LIKE \'%{1}\''.format(self.fieldname, value))
+
+    def isGreaterThan(self, value):
+        return RawSqlWrapper('{0} > {1}'.format(self.fieldname, value))
+
+    def isSmallerThan(self, value):
+        return RawSqlWrapper('{0} < {1}'.format(self.fieldname, value))
+
+class All:
+
+    def __init__(self, query_conditions_list):
+        self.query_conditions_list = query_conditions_list
+
+    @property
+    def query_condition_list(self):
+        return self.query_conditions_list
+
+class Any:
+    def __init__(self, query_conditions_list):
+        self.any_query_conditions_list = query_conditions_list
+
+    @property
+    def query_conditions_list(self):
+        return self.any_query_conditions_list

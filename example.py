@@ -24,6 +24,6 @@ while True:
         '''))
         searchfor = input('Search for : ')
         if searchby == 1:
-            print(database.query('students', where = 'name = \'{0}\''.format(searchfor)))
+            print(database.query('students', where = sqp.Any([sqp.Field('name').isLike(searchfor), sqp.Field('age').isEqualTo(searchfor)])))
         elif searchby == 2:
-            print(database.query('students', where = 'age = {0}'.format(searchfor)))
+            print(database.query('students', where = sqp.Field('age').isGreaterThan(searchfor)))
