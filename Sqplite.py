@@ -11,21 +11,19 @@ class Sqplite:
 
     onOpenSQL = 'CREATE TABLE IF NOT EXISTS '
 
-    def __init__(self, dbname, onOpen):
+    def __init__(self, dbname, onOpen = None):
         # dbname is the name of the sqlite3 file that is created 
         # to store the data
         self.dbconnection = sql.connect(dbname)
-        if not onOpen == '':
+        if not onOpen == None:
             cursor = self.connection.cursor()
-            cursor.execute(self.onOpenSQL+onOpen)
+            print(onOpen.toSQL())
+            cursor.execute(onOpen.toSQL())
 
     @property
     def connection(self):
         # returns the cursor object for the dataconnection
         return self.dbconnection
-
-    def createTable(self, schema):
-        pass
 
     def importFromOtherDatabase(self, source, sourcetable, destinationtable):
         # use this method to import records from another database file.
@@ -104,6 +102,9 @@ class Sqplite:
         if batch == False:
             self.connection.commit()
 
+    
+
+
     def formatRawResults(self, rawResults, tablename = None, columnlist=None):
         # Refactored method of getting the results as a list of dictionaries
         # instead of tuples, the list of tuples containing results are passed in as 
@@ -145,29 +146,10 @@ class Sqplite:
         cursor = self.connection.cursor()
         if where == None:
             cursor.execute('SELECT * FROM {0}'.format(tablename))
-        elif type(where) == All:
-            sqlString = ''
-            for condition in where.query_conditions_list:
-                sqlString = sqlString + condition.toSQL() + ' AND '
-            sqlString = sqlString[:-4]
-            print('SELECT * FROM {0} WHERE {1}'.format(tablename, sqlString))
-            cursor.execute('SELECT * FROM {0} WHERE {1}'.format(tablename, sqlString))
-
-        elif type(where) == Field:
-            sqlstring = 'SELECT * FROM {0} WHERE {1}'.format(tablename, where.toSQL())
-            print(sqlstring)
-            cursor.execute(sqlstring)
-
-        elif type(where) == Any:
-            sqlString = ''
-            for condition in where.query_conditions_list:
-                sqlString = sqlString + condition.toSQL() + ' OR '
-            sqlString = sqlString[:-3]
-            print('SELECT * FROM {0} WHERE {1}'.format(tablename, sqlString))
-            cursor.execute('SELECT * FROM {0} WHERE {1}'.format(tablename, sqlString))
-
-        results = cursor.fetchall()
-        return self.formatRawResults(rawResults=results, tablename=tablename)
+        else:
+            cursor.execute('SELECT * FROM {0} WHERE {1}'.format(tablename, whereParser(where)))
+        resultlist = cursor.fetchall()
+        return self.formatRawResults(rawResults=resultlist, tablename=tablename)
 
     def update(self, tablename, newValue, where, fieldnames = None):
 
@@ -185,16 +167,16 @@ class Sqplite:
         updatestring = ''
         for fieldname in fieldnames:
             if fieldname in newValue.keys():
-                if newValue[fieldname].isnumeric():
+                if type(newValue[fieldname]) == int:
                     updatestring = updatestring+fieldname + \
-                        '='+newValue[fieldname]+','
+                        '='+str(newValue[fieldname])+', '
                 else:
                     updatestring = updatestring+fieldname + \
                         '='+'\''+newValue[fieldname]+'\''+', '
 
         updatestring = updatestring[:-2]
         sqlstring = 'UPDATE {0} SET {1} WHERE {2}'.format(
-            tablename, updatestring, where)
+           tablename, updatestring, whereParser(where))
         cursor.execute(sqlstring)
         self.connection.commit()
 
@@ -202,7 +184,7 @@ class Sqplite:
         # Just pass in the name of the table from which you want to delete the record
         # the where the string is expected in proper sql format
         cursor = self.connection.cursor()
-        sqlstring = 'DELETE FROM {0} WHERE {1}'.format(tablename, where)
+        sqlstring = 'DELETE FROM {0} WHERE {1}'.format(tablename, whereParser(where))
         cursor.execute(sqlstring)
         self.connection.commit()
 
@@ -256,6 +238,7 @@ class IntField(SqlSyntaxGenerator):
             sqlString = sqlString + ' AUTO INCREMENT '
         if self.primary_key :
             sqlString = sqlString + ' PRIMARY KEY '
+        return sqlString
 
 class RawSqlWrapper(SqlSyntaxGenerator):
     def __init__(self, sqlString):
@@ -313,3 +296,29 @@ class Any:
     @property
     def query_conditions_list(self):
         return self.any_query_conditions_list
+
+def createTable(name, fields):
+    definationString = ''
+    for field in fields:
+        definationString = definationString + field.toSQL()
+    return RawSqlWrapper('CREATE TABLE IF NOT EXISTS {0} ({1})'.format(name, definationString))
+    
+def whereParser(where):
+    sqlString = ''
+    if type(where) == All:
+        for condition in where.query_conditions_list:
+            sqlString = sqlString + condition.toSQL() + ' AND '
+        sqlString = sqlString[:-4]
+        print(sqlString)
+        return sqlString
+
+    elif type(where) == Any:
+        for condition in where.query_conditions_list:
+            sqlString = sqlString + condition.toSQL() + ' OR '
+        sqlString = sqlString[:-3]
+        print(sqlString)
+        return sqlString
+
+    elif type(where) == RawSqlWrapper:
+        print(where.toSQL())
+        return where.toSQL()

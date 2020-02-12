@@ -1,12 +1,14 @@
-import Sqplite as sqp 
+import Sqplite as sqp
 
-database = sqp.Sqplite('Mydatabase.db' ,onOpen = 'students (name VARCHAR(50), age INTEGER)')
+database = sqp.Sqplite('Mydatabase.db' ,onOpen = sqp.createTable(name = 'students', fields = 
+    [sqp.CharField(name = 'name'), sqp.IntField(name = 'age')] ))
 while True:
     choice = int(input('''
         1. Enter new detail 
         2. Retrieve all results
         3. Exit
         4. Search
+        5. Update
     '''))
     if choice == 1:
         name = input('Enter the name ')
@@ -24,6 +26,11 @@ while True:
         '''))
         searchfor = input('Search for : ')
         if searchby == 1:
-            print(database.query('students', where = sqp.Any([sqp.Field('name').isLike(searchfor), sqp.Field('age').isEqualTo(searchfor)])))
+            print(database.query('students', where = sqp.Any([sqp.Field('name').isLike(searchfor), sqp.Field('age').isGreaterThan(5)])))
         elif searchby == 2:
-            print(database.query('students', where = sqp.Field('age').isGreaterThan(searchfor)))
+            print(database.query('students', where = sqp.Field('age').isEqualTo(searchfor)))
+
+    elif choice == 5:
+        updatewherename = input('name of the record to be updated : ')
+        newage = int(input('new age : '))
+        database.update('students', newValue = {'age' : newage}, where = sqp.Field('name').isEqualTo(updatewherename))     
